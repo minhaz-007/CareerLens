@@ -1,3 +1,9 @@
+import Link from "next/link";
+
+
+
+
+
 export default function Home() {
   return (
     <main className="min-h-screen bg-[#07090D] text-white">
@@ -34,9 +40,13 @@ export default function Home() {
               Sign in
             </button>
 
-            <button className="rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-black transition hover:bg-cyan-300">
+            <Link
+              href="/check"
+              className="rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-black transition hover:bg-cyan-300"
+            >
               Check my CV
-            </button>
+            </Link>
+                        
           </div>
         </div>
       </nav>
@@ -67,10 +77,14 @@ export default function Home() {
             </p>
 
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <button className="rounded-xl bg-cyan-400 px-6 py-3.5 font-semibold text-black transition hover:-translate-y-0.5 hover:bg-cyan-300">
-                Check my CV — Free
-              </button>
 
+            <Link
+              href="/check"
+              className="rounded-xl bg-cyan-400 px-6 py-3.5 text-center font-semibold text-black transition hover:-translate-y-0.5 hover:bg-cyan-300"
+            >
+              Check my CV — Free
+            </Link>
+              
               <button className="rounded-xl border border-white/10 bg-white/5 px-6 py-3.5 font-medium text-white transition hover:bg-white/10">
                 See example analysis
               </button>
