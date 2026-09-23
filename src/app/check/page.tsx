@@ -1,5 +1,5 @@
 "use client";
-
+import React from "react";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -10,6 +10,8 @@ export default function CheckCVPage() {
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [targetRole, setTargetRole] = useState("");
+  const [analysing, setAnalysing] = useState(false);
+  const [error, setError] = useState("");
 
   function chooseFile(selectedFile?: File) {
     if (!selectedFile) return;
@@ -27,6 +29,48 @@ export default function CheckCVPage() {
     }
 
     setFile(selectedFile);
+  }
+
+  async function analyseCV() {
+    if (!file || analysing) return;
+
+    setAnalysing(true);
+    setError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("targetRole", targetRole);
+
+      const response = await fetch("/api/analyse", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to analyse your CV.");
+      }
+
+      sessionStorage.setItem(
+        "careerLensCV",
+        JSON.stringify({
+          ...data,
+          targetRole: targetRole.trim(),
+        })
+      );
+
+      router.push("/analysing");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Please try again."
+      );
+
+      setAnalysing(false);
+    }
   }
 
   return (
@@ -204,17 +248,23 @@ export default function CheckCVPage() {
 
             {/* CTA */}
             <button
-              disabled={!file}
-              onClick={() => router.push("/analysing")}
+              disabled={!file || analysing}
+              onClick={analyseCV}
               className={`mt-7 flex w-full items-center justify-center gap-2 rounded-xl px-5 py-4 text-sm font-semibold transition ${
                 file
                   ? "bg-cyan-400 text-black hover:-translate-y-0.5 hover:bg-cyan-300"
                   : "cursor-not-allowed bg-white/5 text-zinc-600"
               }`}
             >
-              Analyse my CV
+              {analysing ? "Reading your CV..." : "Analyse my CV"}
               <ArrowIcon />
             </button>
+
+            {error && (
+              <div className="mt-4 rounded-xl border border-red-400/20 bg-red-400/[0.06] px-4 py-3 text-sm text-red-300">
+                {error}
+              </div>
+            )}
 
             <div className="mt-5 flex items-center justify-center gap-2 text-xs text-zinc-600">
               <LockIcon />

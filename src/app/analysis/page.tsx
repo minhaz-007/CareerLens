@@ -1,18 +1,101 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 type FindingProps = {
   severity: "critical" | "improve" | "passed";
   title: string;
   description: string;
-  children?: React.ReactNode;
+  children?: ReactNode;
   premium?: boolean;
+};
+
+type AnalysisData = {
+  success: boolean;
+  fileName: string;
+  characters: number;
+  words: number;
+  targetRole: string;
+
+  analysis: {
+    cvHealth: {
+      score: number;
+
+      scores: {
+        structure: number;
+        readability: number;
+        impact: number;
+      };
+
+      stats: {
+        critical: number;
+        improvements: number;
+        passed: number;
+      };
+
+      checks: {
+        name: string;
+        passed: boolean;
+        message: string;
+        category: "structure" | "contact" | "impact" | "readability";
+      }[];
+    };
+
+    roleReadiness: {
+      targetRole: string;
+      score: number | null;
+      status: "not-analysed" | "analysed" | "unsupported";
+      profileId: string | null;
+      family: string | null;
+      confidence: "high" | "medium" | "low" | "none";
+
+      evidence: {
+        name: string;
+        weight: number;
+        matched: boolean;
+        matchedKeywords: string[];
+      }[];
+    };
+  };
 };
 
 export default function AnalysisPage() {
   const [tab, setTab] = useState<"issues" | "passed">("issues");
+  const [result, setResult] = useState<AnalysisData | null>(null);
+
+  useEffect(() => {
+    const savedResult = sessionStorage.getItem("careerLensCV");
+
+    if (!savedResult) return;
+
+    try {
+      const parsedResult = JSON.parse(savedResult) as AnalysisData;
+      setResult(parsedResult);
+    } catch {
+      console.error("Could not load CareerLens analysis.");
+    }
+  }, []);
+
+  const analysis = result?.analysis;
+  const cvHealth = analysis?.cvHealth;
+  const roleReadiness = analysis?.roleReadiness;
+
+  const overallScore = cvHealth?.score ?? 0;
+
+  const structureScore = cvHealth?.scores.structure ?? 0;
+  const readabilityScore = cvHealth?.scores.readability ?? 0;
+  const impactScore = cvHealth?.scores.impact ?? 0;
+
+  const criticalCount = cvHealth?.stats.critical ?? 0;
+  const improvementCount = cvHealth?.stats.improvements ?? 0;
+  const passedCount = cvHealth?.stats.passed ?? 0;
+
+  const scoreDegrees = Math.round((overallScore / 100) * 360);
+  const failedChecks = cvHealth?.checks.filter((check) => !check.passed) ?? [];
+
+  const passedChecks = cvHealth?.checks.filter((check) => check.passed) ?? [];
 
   return (
     <main className="min-h-screen bg-[#07090D] text-white">
@@ -58,7 +141,8 @@ export default function AnalysisPage() {
             </h1>
 
             <p className="mt-2 text-sm text-zinc-500">
-              SWE_CV.pdf · Target role: Data Analyst
+              {result?.fileName ?? "CV"} · Target role:{" "}
+              {result?.targetRole || "Not specified"}
             </p>
           </div>
 
@@ -81,12 +165,17 @@ export default function AnalysisPage() {
           <div className="grid lg:grid-cols-[340px_1fr]">
             {/* Overall score */}
             <div className="flex flex-col items-center justify-center border-b border-white/10 p-8 lg:border-b-0 lg:border-r">
-              <p className="text-sm text-zinc-500">ATS Readiness</p>
+              <p className="text-sm text-zinc-500">CV Health</p>
 
-              <div className="relative mt-6 flex h-48 w-48 items-center justify-center rounded-full bg-[conic-gradient(#22d3ee_0deg,#22d3ee_259deg,#27272a_259deg,#27272a_360deg)] p-[10px]">
+              <div
+                className="relative mt-6 flex h-48 w-48 items-center justify-center rounded-full p-[10px]"
+                style={{
+                  background: `conic-gradient(#22d3ee 0deg, #22d3ee ${scoreDegrees}deg, #27272a ${scoreDegrees}deg, #27272a 360deg)`,
+                }}
+              >
                 <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-[#0D1117]">
                   <span className="text-6xl font-semibold tracking-tight">
-                    72
+                    {overallScore}
                   </span>
                   <span className="mt-1 text-sm text-zinc-600">out of 100</span>
                 </div>
@@ -97,8 +186,9 @@ export default function AnalysisPage() {
               </span>
 
               <p className="mt-4 max-w-[250px] text-center text-xs leading-5 text-zinc-600">
-                Your CV has a solid foundation, but several improvements could
-                strengthen readability and role alignment.
+                Your CV has a solid foundation. The checks below highlight
+                opportunities to strengthen its structure, readability and
+                impact.
               </p>
             </div>
 
@@ -108,72 +198,193 @@ export default function AnalysisPage() {
                 <div>
                   <p className="text-sm font-medium">Score breakdown</p>
                   <p className="mt-1 text-xs text-zinc-600">
-                    Based on common ATS and recruiter-facing CV considerations.
+                    Based on document structure, readability and evidence
+                    signals.
                   </p>
                 </div>
 
                 <span className="hidden rounded-lg bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-300 sm:block">
-                  9 improvements found
+                  {criticalCount + improvementCount} improvements found
                 </span>
               </div>
 
               <div className="mt-8 grid gap-x-10 gap-y-7 md:grid-cols-2">
                 <ScoreBar
-                  label="Formatting"
-                  score={91}
-                  description="Layout & parsing"
+                  label="Readability"
+                  score={readabilityScore}
+                  description="Contact, length & basic readability"
                 />
                 <ScoreBar
                   label="Structure"
-                  score={84}
+                  score={structureScore}
                   description="Sections & hierarchy"
                 />
-                <ScoreBar
-                  label="Keywords"
-                  score={61}
-                  description="Role relevance"
-                />
+
                 <ScoreBar
                   label="Impact"
-                  score={66}
+                  score={impactScore}
                   description="Achievements & evidence"
                 />
               </div>
 
               <div className="mt-9 grid grid-cols-3 gap-3">
                 <MiniStat
-                  number="2"
+                  number={String(criticalCount)}
                   label="Critical issues"
                   tone="critical"
                 />
-                <MiniStat number="7" label="Improvements" tone="warning" />
-                <MiniStat number="18" label="Checks passed" tone="good" />
+                <MiniStat
+                  number={String(improvementCount)}
+                  label="Improvements"
+                  tone="warning"
+                />
+                <MiniStat
+                  number={String(passedCount)}
+                  label="Checks passed"
+                  tone="good"
+                />
               </div>
             </div>
           </div>
         </section>
 
-        {/* POTENTIAL SCORE */}
-        <section className="mt-5 flex flex-col justify-between gap-5 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.04] p-6 md:flex-row md:items-center">
-          <div className="flex items-center gap-5">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-cyan-400/10 text-xl font-semibold text-cyan-300">
-              +14
+        {/* LAYER 2 — ROLE READINESS */}
+        <section className="mt-5 rounded-2xl border border-white/10 bg-[#0D1117] p-6">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="flex items-center gap-3">
+                <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-medium text-cyan-300">
+                  LAYER 2
+                </span>
+
+                <span className="text-xs text-zinc-600">
+                  Role-specific analysis
+                </span>
+              </div>
+
+              <h2 className="mt-4 text-xl font-semibold">Role Readiness</h2>
+
+              <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-500">
+                How much relevant evidence CareerLens can detect for your target
+                career family.
+              </p>
             </div>
 
-            <div>
-              <p className="font-medium">
-                Your CV has room to become significantly stronger
-              </p>
-              <p className="mt-1 text-sm text-zinc-500">
-                Addressing the highlighted issues could improve clarity,
-                relevance and recruiter readability.
-              </p>
-            </div>
+            {roleReadiness?.status === "analysed" &&
+              roleReadiness.score !== null && (
+                <div className="sm:text-right">
+                  <div className="text-4xl font-semibold tracking-tight text-white">
+                    {roleReadiness.score}
+                    <span className="text-lg text-zinc-600">/100</span>
+                  </div>
+
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Evidence detected
+                  </p>
+                </div>
+              )}
           </div>
 
-          <button className="shrink-0 rounded-xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-black transition hover:bg-cyan-300">
-            Fix all with AI — £2.99
-          </button>
+          {roleReadiness?.status === "analysed" ? (
+            <div className="mt-6">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-300">
+                  Target:{" "}
+                  <span className="font-medium text-white">
+                    {roleReadiness.targetRole}
+                  </span>
+                </span>
+
+                {roleReadiness.family && (
+                  <span className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-400">
+                    Family:{" "}
+                    <span className="text-zinc-200">
+                      {roleReadiness.family}
+                    </span>
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                {roleReadiness.evidence.map((item) => (
+                  <div
+                    key={item.name}
+                    className={`rounded-xl border p-4 ${
+                      item.matched
+                        ? "border-emerald-400/10 bg-emerald-400/[0.03]"
+                        : "border-white/10 bg-black/20"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs ${
+                          item.matched
+                            ? "bg-emerald-400/10 text-emerald-300"
+                            : "bg-white/[0.04] text-zinc-600"
+                        }`}
+                      >
+                        {item.matched ? "✓" : "○"}
+                      </div>
+
+                      <div className="min-w-0">
+                        <p
+                          className={`text-sm font-medium ${
+                            item.matched ? "text-zinc-200" : "text-zinc-400"
+                          }`}
+                        >
+                          {item.name}
+                        </p>
+
+                        {item.matched ? (
+                          <p className="mt-1 text-xs leading-5 text-zinc-500">
+                            Evidence found:{" "}
+                            {item.matchedKeywords.slice(0, 4).join(", ")}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-xs leading-5 text-zinc-600">
+                            No clear evidence detected in this CV.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <p className="mt-5 text-xs leading-5 text-zinc-600">
+                Role Readiness measures evidence detected in your CV against a
+                general career profile. It does not mean every employer requires
+                every item listed. Specific vacancies can have different
+                requirements.
+              </p>
+            </div>
+          ) : roleReadiness?.status === "unsupported" ? (
+            <div className="mt-6 rounded-xl border border-amber-400/10 bg-amber-400/[0.03] p-5">
+              <p className="text-sm font-medium text-amber-200">
+                Detailed role profile not available yet
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-zinc-500">
+                CareerLens does not yet have a detailed profile for{" "}
+                <span className="text-zinc-300">
+                  {roleReadiness.targetRole}
+                </span>
+                . We will not generate a misleading Role Readiness score. You
+                will still receive your CV Health analysis.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-6 rounded-xl border border-white/10 bg-black/20 p-5">
+              <p className="text-sm font-medium text-zinc-300">
+                No target role selected
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-zinc-500">
+                Add a target role when checking your CV to receive a
+                role-specific readiness analysis.
+              </p>
+            </div>
+          )}
         </section>
 
         {/* MAIN CONTENT */}
@@ -191,7 +402,7 @@ export default function AnalysisPage() {
               >
                 Issues & improvements
                 <span className="ml-2 rounded-full bg-white/[0.06] px-2 py-0.5 text-xs">
-                  9
+                  {failedChecks.length}
                 </span>
               </button>
 
@@ -205,75 +416,63 @@ export default function AnalysisPage() {
               >
                 Passed checks
                 <span className="ml-2 rounded-full bg-white/[0.06] px-2 py-0.5 text-xs">
-                  18
+                  {passedChecks.length}
                 </span>
               </button>
             </div>
 
             {tab === "issues" ? (
               <div className="mt-5 space-y-4">
-                <Finding
-                  severity="critical"
-                  title="Your experience lacks measurable achievements"
-                  description="Several bullet points describe responsibilities but don't show scope, results or measurable impact."
-                  premium
-                >
-                  <Comparison
-                    before="Responsible for analysing sales data and preparing weekly reports."
-                    after="Analysed weekly sales performance across [X] accounts, identifying trends that helped the team improve [relevant outcome]."
-                  />
-                </Finding>
+                {failedChecks.length > 0 ? (
+                  failedChecks.map((check) => {
+                    const isCritical = [
+                      "Experience section",
+                      "Education section",
+                      "Email address",
+                    ].includes(check.name);
 
-                <Finding
-                  severity="critical"
-                  title="Important target-role keywords are missing"
-                  description="Your CV shows transferable experience, but several Data Analyst terms are either missing or weakly represented."
-                  premium
-                >
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Keyword text="SQL" />
-                    <Keyword text="Power BI" />
-                    <Keyword text="Data visualisation" />
-                    <Keyword text="Dashboards" />
-                    <Keyword text="Data cleaning" />
+                    return (
+                      <Finding
+                        key={check.name}
+                        severity={isCritical ? "critical" : "improve"}
+                        title={check.name}
+                        description={check.message}
+                      />
+                    );
+                  })
+                ) : (
+                  <div className="rounded-2xl border border-emerald-400/10 bg-emerald-400/[0.03] p-6">
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-300">
+                        ✓
+                      </div>
+
+                      <div>
+                        <h3 className="font-medium">
+                          No major issues detected
+                        </h3>
+
+                        <p className="mt-2 text-sm leading-6 text-zinc-500">
+                          CareerLens did not detect any failed checks in this
+                          analysis. You can still improve the CV further by
+                          matching it against a specific job description.
+                        </p>
+                      </div>
+                    </div>
                   </div>
-
-                  <p className="mt-4 text-xs leading-5 text-amber-200/60">
-                    Only add skills you genuinely possess. CareerLens should
-                    never invent experience for you.
-                  </p>
-                </Finding>
-
-                <Finding
-                  severity="improve"
-                  title="Your professional summary is too generic"
-                  description="Your opening summary could communicate your target role, strongest skills and value more quickly."
-                  premium
-                />
-
-                <Finding
-                  severity="improve"
-                  title="Some bullet points start with weak language"
-                  description='Phrases such as "responsible for" and "helped with" can often be replaced with clearer action-led wording.'
-                  premium
-                />
-
-                <Finding
-                  severity="improve"
-                  title="Skills could be grouped more clearly"
-                  description="Separating technical tools, analytical skills and business skills may improve scanning and readability."
-                />
+                )}
               </div>
             ) : (
               <div className="mt-5 space-y-3">
-                <Passed text="Contact information is easy to identify" />
-                <Passed text="Standard section headings are used" />
-                <Passed text="No excessive use of tables detected" />
-                <Passed text="Education section is clearly structured" />
-                <Passed text="Employment dates are consistently formatted" />
-                <Passed text="CV length is within a reasonable range" />
-                <Passed text="File format is suitable for common ATS parsing" />
-                <Passed text="No distracting graphics detected" />
+                {passedChecks.length > 0 ? (
+                  passedChecks.map((check) => (
+                    <Passed key={check.name} text={check.message} />
+                  ))
+                ) : (
+                  <div className="rounded-xl border border-white/10 bg-[#0D1117] p-5 text-sm text-zinc-500">
+                    No passed checks are available yet.
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -319,9 +518,7 @@ export default function AnalysisPage() {
                 BEST FOR THIS CV
               </span>
 
-              <h3 className="relative mt-5 text-lg font-semibold">
-                Fix My CV
-              </h3>
+              <h3 className="relative mt-5 text-lg font-semibold">Fix My CV</h3>
 
               <p className="relative mt-2 text-sm leading-6 text-zinc-400">
                 Improve wording, bullet structure, clarity and target-role
@@ -372,9 +569,10 @@ export default function AnalysisPage() {
             {/* Disclaimer */}
             <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
               <p className="text-[11px] leading-5 text-zinc-600">
-                ATS Readiness is an estimate based on common CV structure,
-                readability, keyword alignment and parsing considerations.
-                Results do not guarantee ATS ranking, interviews or employment
+                CV Health is an automated estimate based on document structure,
+                readability and evidence signals detected in your CV. It does
+                not represent a score from any specific employer or applicant
+                tracking system and does not guarantee interviews or employment
                 outcomes.
               </p>
             </div>
@@ -492,13 +690,7 @@ function Finding({
   );
 }
 
-function Comparison({
-  before,
-  after,
-}: {
-  before: string;
-  after: string;
-}) {
+function Comparison({ before, after }: { before: string; after: string }) {
   return (
     <div className="mt-5 grid gap-3 md:grid-cols-2">
       <div className="rounded-xl border border-red-400/10 bg-red-400/[0.03] p-4">
