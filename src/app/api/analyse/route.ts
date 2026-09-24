@@ -68,10 +68,6 @@ export async function POST(request: Request) {
       words: text.split(/\s+/).filter(Boolean).length,
       targetRole,
       analysis,
-
-      // Temporary development preview.
-      // We will remove this before production.
-      preview: text.slice(0, 500),
     });
   } catch (error) {
     console.error("CV analysis error:", error);

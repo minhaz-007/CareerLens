@@ -56,6 +56,8 @@ type AnalysisData = {
         weight: number;
         matched: boolean;
         matchedKeywords: string[];
+
+        evidenceLevel: "none" | "mentioned" | "demonstrated" | "impact";
       }[];
     };
   };
@@ -336,10 +338,30 @@ export default function AnalysisPage() {
                         </p>
 
                         {item.matched ? (
-                          <p className="mt-1 text-xs leading-5 text-zinc-500">
-                            Evidence found:{" "}
-                            {item.matchedKeywords.slice(0, 4).join(", ")}
-                          </p>
+                          <div className="mt-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                  item.evidenceLevel === "impact"
+                                    ? "bg-emerald-400/10 text-emerald-300"
+                                    : item.evidenceLevel === "demonstrated"
+                                    ? "bg-cyan-400/10 text-cyan-300"
+                                    : "bg-amber-400/10 text-amber-300"
+                                }`}
+                              >
+                                {item.evidenceLevel === "impact"
+                                  ? "Impact evidence"
+                                  : item.evidenceLevel === "demonstrated"
+                                  ? "Demonstrated"
+                                  : "Mentioned"}
+                              </span>
+                            </div>
+
+                            <p className="mt-2 text-xs leading-5 text-zinc-500">
+                              Evidence found:{" "}
+                              {item.matchedKeywords.slice(0, 4).join(", ")}
+                            </p>
+                          </div>
                         ) : (
                           <p className="mt-1 text-xs leading-5 text-zinc-600">
                             No clear evidence detected in this CV.

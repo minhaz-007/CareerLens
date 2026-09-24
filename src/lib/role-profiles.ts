@@ -1874,6 +1874,8 @@ export type RoleEvidence = {
   weight: number;
   matched: boolean;
   matchedKeywords: string[];
+
+  evidenceLevel: "none" | "mentioned" | "demonstrated" | "impact";
 };
 
 export type RoleMatchResult = {
@@ -1899,18 +1901,146 @@ function containsKeyword(text: string, keyword: string) {
   const normalisedText = normalise(text);
   const normalisedKeyword = normalise(keyword);
 
-  if (!normalisedKeyword) {
-    return false;
-  }
+  if (!normalisedKeyword) return false;
 
-  // For very short technical terms such as R, C# or Go,
-  // avoid loose substring matching.
   if (normalisedKeyword.length <= 2) {
     const words = normalisedText.split(/\s+/);
     return words.includes(normalisedKeyword);
   }
 
   return normalisedText.includes(normalisedKeyword);
+}
+
+function countKeywordOccurrences(text: string, keyword: string) {
+  const normalisedText = normalise(text);
+  const normalisedKeyword = normalise(keyword);
+
+  if (!normalisedKeyword) return 0;
+
+  if (normalisedKeyword.length <= 2) {
+    const words = normalisedText.split(/\s+/);
+
+    return words.filter((word) => word === normalisedKeyword).length;
+  }
+
+  let count = 0;
+  let position = 0;
+
+  while (true) {
+    const foundAt = normalisedText.indexOf(normalisedKeyword, position);
+
+    if (foundAt === -1) break;
+
+    count += 1;
+    position = foundAt + normalisedKeyword.length;
+  }
+
+  return count;
+}
+function getEvidenceContext(text: string, keyword: string) {
+  const normalisedKeyword = normalise(keyword);
+
+  if (!normalisedKeyword) {
+    return {
+      mentions: 0,
+      contextualMentions: 0,
+      outcomeMentions: 0,
+    };
+  }
+
+  const chunks = text
+    .split(/\r?\n|[•●▪◦]\s*|(?<=[.!?])\s+/)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+
+  const matchingChunks = chunks.filter((chunk) =>
+    normalise(chunk).includes(normalisedKeyword)
+  );
+
+  const actionPattern =
+    /\b(built|developed|created|implemented|designed|engineered|delivered|integrated|deployed|maintained|improved|optimised|optimized|automated|led|managed|analysed|analyzed|supported|resolved|tested|configured|used|worked)\b/i;
+
+  const outcomePattern =
+    /(\d+%|\d+\+|\£\s?\d+|\$\s?\d+|\b\d+\s?(users|customers|clients|projects|applications|requests|hours|days|weeks|months)\b|\breduced\b|\bincreased\b|\bimproved\b|\bsaved\b|\bgrew\b)/i;
+
+  const contextualChunks = matchingChunks.filter((chunk) =>
+    actionPattern.test(chunk)
+  );
+
+  const outcomeChunks = contextualChunks.filter((chunk) =>
+    outcomePattern.test(chunk)
+  );
+
+  return {
+    mentions: matchingChunks.length,
+    contextualMentions: contextualChunks.length,
+    outcomeMentions: outcomeChunks.length,
+  };
+}
+
+type CVSections = {
+  skills: string;
+  experience: string;
+  projects: string;
+  other: string;
+};
+
+function extractCVSections(text: string): CVSections {
+  const sections: CVSections = {
+    skills: "",
+    experience: "",
+    projects: "",
+    other: "",
+  };
+
+  const preparedText = text.replace(
+    /\b(Technical Skills|Core Skills|Key Skills|Skills|Professional Experience|Work Experience|Employment History|Work History|Experience|Selected Projects|Technical Projects|Personal Projects|Academic Projects|Projects)\b/gi,
+    "\n$1\n"
+  );
+
+  const lines = preparedText.split(/\r?\n/);
+
+  let currentSection: keyof CVSections = "other";
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    if (!line) continue;
+
+    const heading = normalise(line);
+    const cleanHeading = heading.replace(/:$/, "").trim();
+
+    if (
+      /^(skills|technical skills|core skills|key skills|technologies|technical expertise)$/.test(
+        cleanHeading
+      )
+    ) {
+      currentSection = "skills";
+      continue;
+    }
+
+    if (
+      /^(experience|work experience|professional experience|employment|employment history|work history)$/.test(
+        cleanHeading
+      )
+    ) {
+      currentSection = "experience";
+      continue;
+    }
+
+    if (
+      /^(projects|projects experience|personal projects|technical projects|academic projects|selected projects)$/.test(
+        cleanHeading
+      )
+    ) {
+      currentSection = "projects";
+      continue;
+    }
+
+    sections[currentSection] += `${line}\n`;
+  }
+
+  return sections;
 }
 
 export function findRoleProfile(targetRole: string): RoleProfile | null {
@@ -1977,16 +2107,64 @@ export function analyseRoleReadiness(
     };
   }
 
+  const cvSections = extractCVSections(cvText);
+
   const evidence: RoleEvidence[] = profile.signals.map((signal) => {
     const matchedKeywords = signal.keywords.filter((keyword) =>
       containsKeyword(cvText, keyword)
     );
 
+    const matched = matchedKeywords.length > 0;
+
+    const contexts = matchedKeywords.map((keyword) =>
+      getEvidenceContext(cvText, keyword)
+    );
+
+    const totalContextualMentions = contexts.reduce(
+      (total, context) => total + context.contextualMentions,
+      0
+    );
+
+    const totalOutcomeMentions = contexts.reduce(
+      (total, context) => total + context.outcomeMentions,
+      0
+    );
+
+    let evidenceLevel: RoleEvidence["evidenceLevel"] = "none";
+
+    if (matched) {
+      evidenceLevel = "mentioned";
+    }
+
+    const demonstratedKeywords = matchedKeywords.filter(
+      (keyword) =>
+        containsKeyword(cvSections.experience, keyword) ||
+        containsKeyword(cvSections.projects, keyword)
+    );
+
+    if (demonstratedKeywords.length > 0) {
+      evidenceLevel = "demonstrated";
+    }
+
+    const demonstratedText = `${cvSections.experience}\n${cvSections.projects}`;
+
+    const hasImpactEvidence = demonstratedKeywords.some((keyword) => {
+      const context = getEvidenceContext(demonstratedText, keyword);
+
+      return context.outcomeMentions > 0;
+    });
+
+    if (hasImpactEvidence) {
+      evidenceLevel = "impact";
+    }
+
     return {
       name: signal.name,
       weight: signal.weight,
-      matched: matchedKeywords.length > 0,
+      matched,
       matchedKeywords,
+
+      evidenceLevel,
     };
   });
 
