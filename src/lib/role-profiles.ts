@@ -1961,8 +1961,7 @@ function getEvidenceContext(text: string, keyword: string) {
     /\b(built|developed|created|implemented|designed|engineered|delivered|integrated|deployed|maintained|improved|optimised|optimized|automated|led|managed|analysed|analyzed|supported|resolved|tested|configured|used|worked)\b/i;
 
   const outcomePattern =
-    /(\d+%|\d+\+|\£\s?\d+|\$\s?\d+|\b\d+\s?(users|customers|clients|projects|applications|requests|hours|days|weeks|months)\b|\breduced\b|\bincreased\b|\bimproved\b|\bsaved\b|\bgrew\b)/i;
-
+    /\b(reduced|decreased|cut|lowered|increased|grew|improved|boosted|raised|saved|accelerated|shortened|streamlined|enabled|achieved)\b[^.!?]{0,80}(\d+%|\d+\+|\£\s?\d+|\$\s?\d+|\d+\s?(?:hours|days|weeks|months))\b|(\d+%|\£\s?\d+|\$\s?\d+)[^.!?]{0,80}\b(reduction|increase|growth|improvement|saving|faster|more|less)\b/i;
   const contextualChunks = matchingChunks.filter((chunk) =>
     actionPattern.test(chunk)
   );
@@ -2151,7 +2150,7 @@ export function analyseRoleReadiness(
     const hasImpactEvidence = demonstratedKeywords.some((keyword) => {
       const context = getEvidenceContext(demonstratedText, keyword);
 
-      return context.outcomeMentions > 0;
+      return context.contextualMentions > 0 && context.outcomeMentions > 0;
     });
 
     if (hasImpactEvidence) {
